@@ -45,6 +45,8 @@ export default defineConfig(async () => {
   const { cloudflare } = await import('@cloudflare/vite-plugin');
 
   return {
+    resolve: { dedupe: ['react', 'react-dom'] },
+    optimizeDeps: { include: ['@base-ui/react/dialog', '@base-ui/react/button', 'clsx', 'tailwind-merge', 'class-variance-authority'] },
     css: { postcss: { plugins: [tailwindcss()] } },
     server: isCodexSeatbeltSandbox
       ? { watch: { useFsEvents: false, usePolling: true } }

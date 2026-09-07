@@ -7,7 +7,7 @@ import {
 } from '@react-three/postprocessing';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { Float, OrbitControls } from '@react-three/drei';
-import { Suspense, useMemo, useRef } from 'react';
+import { Suspense, useEffect, useMemo, useRef, useState } from 'react';
 import {
   AdditiveBlending,
   BufferGeometry,
@@ -18,6 +18,8 @@ import {
   Group,
   Mesh,
   Vector3,
+  Line,
+  LineBasicMaterial,
 } from 'three';
 const points: [number, number, number][] = [
   [-2.3, 0.3, 0.3],
@@ -26,7 +28,7 @@ const points: [number, number, number][] = [
   [1.1, 0.7, -0.2],
   [2.1, 0.2, 0.35],
 ];
-function Terrain() {
+function Terrain({ reduced }: { reduced: boolean }) {
   const mesh = useRef<Mesh>(null);
   const geometry = useMemo(() => {
     const geo = new BufferGeometry(),
@@ -69,7 +71,7 @@ function Terrain() {
     return geo;
   }, []);
   useFrame((_, d) => {
-    if (mesh.current) mesh.current.rotation.y += d * 0.035;
+    if (mesh.current && !reduced) mesh.current.rotation.y += d * 0.035;
   });
   return (
     <mesh ref={mesh} geometry={geometry} rotation={[-0.18, 0, 0.05]}>
@@ -93,21 +95,40 @@ function RouteLine() {
       ),
     [],
   );
-  return (
-    <line geometry={geometry}>
-      <lineBasicMaterial
-        color="#59cbef"
-        transparent
-        opacity={0.48}
-        blending={AdditiveBlending}
-      />
-    </line>
+  const line = useMemo(
+    () =>
+      new Line(
+        geometry,
+        new LineBasicMaterial({
+          color: '#59cbef',
+          transparent: true,
+          opacity: 0.48,
+          blending: AdditiveBlending,
+        }),
+      ),
+    [geometry],
   );
+  useEffect(
+    () => () => {
+      geometry.dispose();
+      line.material.dispose();
+    },
+    [geometry, line],
+  );
+  return <primitive object={line} />;
 }
-function Beacons({ active, colors }: { active: number; colors: string[] }) {
+function Beacons({
+  active,
+  colors,
+  reduced,
+}: {
+  active: number;
+  colors: string[];
+  reduced: boolean;
+}) {
   const group = useRef<Group>(null);
   useFrame((s) => {
-    if (group.current)
+    if (group.current && !reduced)
       group.current.position.y = Math.sin(s.clock.elapsedTime * 0.35) * 0.035;
   });
   return (
@@ -143,18 +164,30 @@ function Beacons({ active, colors }: { active: number; colors: string[] }) {
     </group>
   );
 }
-function Scene({ active, colors }: { active: number; colors: string[] }) {
+function Scene({
+  active,
+  colors,
+  reduced,
+}: {
+  active: number;
+  colors: string[];
+  reduced: boolean;
+}) {
   return (
     <>
       <color attach="background" args={['#03090e']} />
       <fog attach="fog" args={['#03090e', 5.5, 11]} />
       <ambientLight intensity={0.35} />
       <directionalLight position={[2, 5, 4]} intensity={2.2} color="#9adfff" />
-      <Float speed={0.55} rotationIntensity={0.08} floatIntensity={0.12}>
+      <Float
+        speed={reduced ? 0 : 0.55}
+        rotationIntensity={reduced ? 0 : 0.08}
+        floatIntensity={reduced ? 0 : 0.12}
+      >
         <group rotation={[-0.22, -0.18, 0]} scale={1.28}>
-          <Terrain />
+          <Terrain reduced={reduced} />
           <RouteLine />
-          <Beacons active={active} colors={colors} />
+          <Beacons active={active} colors={colors} reduced={reduced} />
         </group>
       </Float>
       <OrbitControls
@@ -184,15 +217,33 @@ export default function AtlasScene({
   active: number;
   colors: string[];
 }) {
+  const [reduced, setReduced] = useState(true);
+  const [visible, setVisible] = useState(true);
+  const host = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const query = matchMedia('(prefers-reduced-motion: reduce)');
+    const change = () => setReduced(query.matches);
+    change();
+    query.addEventListener('change', change);
+    const observer = new IntersectionObserver(([entry]) =>
+      setVisible(entry.isIntersecting),
+    );
+    if (host.current) observer.observe(host.current);
+    return () => {
+      query.removeEventListener('change', change);
+      observer.disconnect();
+    };
+  }, []);
   return (
-    <div className="scene-canvas">
+    <div className="scene-canvas" ref={host}>
       <Canvas
         dpr={[1, 2]}
+        frameloop={!visible ? 'never' : reduced ? 'demand' : 'always'}
         camera={{ position: [0, 3.7, 6.2], fov: 43 }}
         gl={{ antialias: true, alpha: false }}
       >
         <Suspense fallback={null}>
-          <Scene active={active} colors={colors} />
+          <Scene active={active} colors={colors} reduced={reduced} />
         </Suspense>
       </Canvas>
     </div>
