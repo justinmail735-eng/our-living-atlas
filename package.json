@@ -6,7 +6,12 @@
     "node": ">=22.13.0"
   },
   "scripts": {
+    "setup": "npm ci && npm run dev",
     "dev": "vinext dev",
+    "dev:network": "vinext dev --hostname 0.0.0.0",
+    "test": "node --experimental-strip-types --test tests/memories.test.mjs",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run test && npm run typecheck && npm run build",
     "build": "vinext build",
     "start": "wrangler dev --config dist/server/wrangler.json",
     "lint": "oxlint",
